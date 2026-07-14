@@ -20,14 +20,16 @@ import { type PlayerRow } from "@/pages/players-page"
 import { positionsToRadarRole, type Classification, type RadarRole } from "@/lib/players/player-mapping"
 import { computeRadarData } from "@/lib/players/radar-calculations"
 import { applyPercentiles } from "@/lib/players/radar-percentiles"
+import type { MetricType } from "@/lib/players/radar-metrics"
+import { useInViewAnimation } from "@/hooks/use-in-view-animation"
 
 
-const formatMetricValue = (key: string, val: number | null): string => {
+const formatMetricValue = (key: string, val: number | null, type?: MetricType): string => {
     if (val === null || val === undefined) return "N/A"
     if (key === "rating") return val.toFixed(2)
     if (
-        key.endsWith("_pct") || 
-        key === "pass_acc" || 
+        key.endsWith("_pct") ||
+        key === "pass_acc" ||
         key === "long_ball_acc" ||
         key === "tackle_win_pct" ||
         key === "aerial_win_pct"
@@ -36,6 +38,9 @@ const formatMetricValue = (key: string, val: number | null): string => {
     }
     if (key === "penalty_save_r" || key === "shot_acc" || key === "conversion") {
         return `${(val * 100).toFixed(1)}%`
+    }
+    if (type === "per90") {
+        return `${val.toFixed(2)}/90`
     }
     return val.toFixed(2)
 }
@@ -69,13 +74,13 @@ function normalizeAbsolute(rawValue: number | null, key: string): number {
 const CustomRadarTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload
-        const rawFormatted = formatMetricValue(data.key, data.rawValue)
+        const rawFormatted = formatMetricValue(data.key, data.rawValue, data.type)
         const suffix = (data.percentile !== null && data.percentile !== undefined)
             ? `${data.percentile}th percentile`
             : `small sample`
-            
+
         const avgDisplay = data.averageValue !== null && data.averageValue !== undefined
-            ? ` | Avg: ${formatMetricValue(data.key, data.averageValue)}`
+            ? ` | Avg: ${formatMetricValue(data.key, data.averageValue, data.type)}`
             : ''
 
         return (
@@ -98,6 +103,7 @@ interface ChartRadarGridCircleProps {
 
 export function ChartRadarGridCircle({ player, peers = [], peersLoading = false, peersError = null }: ChartRadarGridCircleProps) {
     const { t } = useTranslation()
+    const { ref: inViewRef, active: inView } = useInViewAnimation<HTMLDivElement>()
 
     const role = React.useMemo(() => {
         return player.radarRole || positionsToRadarRole(player.positions, player.classification as Classification) || "ST"
@@ -139,6 +145,7 @@ export function ChartRadarGridCircle({ player, peers = [], peersLoading = false,
         return spokesToRender.map((spoke) => ({
             subject: spoke.label,
             key: spoke.key,
+            type: spoke.type,
             rawValue: spoke.rawValue,
             percentile: spoke.percentile,
             averageValue: spoke.averageValue,
@@ -159,6 +166,7 @@ export function ChartRadarGridCircle({ player, peers = [], peersLoading = false,
     }
 
     return (
+        <div ref={inViewRef}>
         <Card className="flex flex-col h-full">
             <CardHeader className="pb-2">
                 <CardTitle className="text-xl font-bold tracking-tight">
@@ -174,6 +182,9 @@ export function ChartRadarGridCircle({ player, peers = [], peersLoading = false,
             </CardHeader>
             <CardContent className="pb-0 flex-1 flex flex-col justify-center min-h-[350px]">
                 <div className="flex-1 flex flex-col items-center justify-center">
+                    {!inView ? (
+                        <div className="mx-auto aspect-square w-full max-w-[315px]" />
+                    ) : (
                     <ChartContainer
                         config={chartConfig}
                         className="mx-auto aspect-square w-full max-w-[315px]"
@@ -208,6 +219,9 @@ export function ChartRadarGridCircle({ player, peers = [], peersLoading = false,
                                     strokeWidth: 1.5,
                                     fillOpacity: 1,
                                 }}
+                                isAnimationActive
+                                animationDuration={1000}
+                                animationEasing="ease-out"
                             />
                             {isPercentileReady && (
                                 <Radar
@@ -224,10 +238,14 @@ export function ChartRadarGridCircle({ player, peers = [], peersLoading = false,
                                         strokeWidth: 1,
                                         fillOpacity: 0.8,
                                     }}
+                                    isAnimationActive
+                                    animationDuration={1000}
+                                    animationEasing="ease-out"
                                 />
                             )}
                         </RadarChart>
                     </ChartContainer>
+                    )}
                     {radarData.tier === 'show_only' && (
                         <p className="text-xs text-muted-foreground mt-1 text-center">
                             Small sample — based on {player.statistics?.minutes_played ?? player.minutesPlayed}min played
@@ -246,5 +264,6 @@ export function ChartRadarGridCircle({ player, peers = [], peersLoading = false,
                 </div>
             </CardContent>
         </Card>
+        </div>
     )
 }

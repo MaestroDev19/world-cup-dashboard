@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button"
 import {
   Card,
   CardAction,
-  CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
@@ -34,6 +33,7 @@ import { ChartRadarGridCircle } from "@/components/player-radar"
 import { ChartAreaInteractive } from "@/components/bar-graph"
 import { ChartPlayerPercentiles } from "@/components/player-bars"
 import { PlayerCompareDialog } from "@/components/player-compare-dialog"
+import { PlayerProfileCard } from "@/components/player-profile-card"
 
 export function PlayerDetailsPage() {
   const { t } = useTranslation()
@@ -329,14 +329,7 @@ export function PlayerDetailsPage() {
         <ChartPlayerPercentiles player={player} peers={peers} peersLoading={peersLoading} />
 
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("playerDetailsPage.heatmap", { defaultValue: "Heatmap" })}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>{t("playerDetailsPage.cardContent", { defaultValue: "Card content" })}</p>
-          </CardContent>
-        </Card>
+        <PlayerProfileCard player={player} />
 
       </div>
     </div>

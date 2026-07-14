@@ -5,12 +5,9 @@ import { useTranslation } from "react-i18next"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 import {
     Star,
-    Target,
-    Award,
     Sparkles,
     Shield,
     Eye,
-    Activity,
     ShieldCheck
 } from "lucide-react"
 
@@ -33,20 +30,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { type PlayerRow, getPlayerMatchHistory } from "@/pages/players-page"
+import { type PlayerRow } from "@/pages/players-page"
+import { usePlayerMatchHistory } from "@/hooks/use-player-match-history"
+import { useInViewAnimation } from "@/hooks/use-in-view-animation"
 
 const chartConfig = {
     rating: {
         label: "Match Rating",
         color: "var(--chart-form-positive)",
-    },
-    goals: {
-        label: "Goals",
-        color: "var(--chart-danger)",
-    },
-    assists: {
-        label: "Assists",
-        color: "var(--chart-possession)",
     },
     ga: {
         label: "G/A",
@@ -60,10 +51,6 @@ const chartConfig = {
         label: "Interceptions",
         color: "var(--chart-neutral)",
     },
-    saves: {
-        label: "Saves",
-        color: "var(--chart-form-negative)",
-    },
     cleanSheet: {
         label: "Clean Sheet",
         color: "var(--chart-form-positive)",
@@ -76,7 +63,22 @@ interface StatOption {
     color: string
     colorClass: string
     type: "average" | "total"
-    icon: "rating" | "goals" | "assists" | "ga" | "tackles" | "interceptions" | "saves" | "cleanSheet"
+    icon: "rating" | "ga" | "tackles" | "interceptions" | "cleanSheet"
+}
+
+const ROUND_ABBREVIATIONS: Record<string, string> = {
+    "Round of 32": "R32",
+    "R32": "R32",
+    "Round of 16": "R16",
+    "R16": "R16",
+    "Quarter-final": "QF",
+    "QF": "QF",
+    "Semi-final": "SF",
+    "SF": "SF",
+    "3rd place": "3rd",
+    "3rd": "3rd",
+    "Final": "F",
+    "final": "F",
 }
 
 const getAvailableStats = (position: string, t: any): StatOption[] => {
@@ -90,14 +92,6 @@ const getAvailableStats = (position: string, t: any): StatOption[] => {
                     colorClass: "text-emerald-500",
                     type: "average",
                     icon: "rating"
-                },
-                {
-                    key: "saves",
-                    label: t("playerDetailsPage.savesTab", { defaultValue: "Total Saves" }),
-                    color: "var(--color-saves)",
-                    colorClass: "text-amber-500",
-                    type: "total",
-                    icon: "saves"
                 },
                 {
                     key: "cleanSheet",
@@ -154,22 +148,6 @@ const getAvailableStats = (position: string, t: any): StatOption[] => {
                     icon: "rating"
                 },
                 {
-                    key: "goals",
-                    label: t("playerDetailsPage.goalsTab", { defaultValue: "Total Goals" }),
-                    color: "var(--color-goals)",
-                    colorClass: "text-rose-500",
-                    type: "total",
-                    icon: "goals"
-                },
-                {
-                    key: "assists",
-                    label: t("playerDetailsPage.assistsTab", { defaultValue: "Total Assists" }),
-                    color: "var(--color-assists)",
-                    colorClass: "text-violet-500",
-                    type: "total",
-                    icon: "assists"
-                },
-                {
                     key: "ga",
                     label: t("playerDetailsPage.gaTab", { defaultValue: "Total G/A" }),
                     color: "var(--color-ga)",
@@ -191,68 +169,46 @@ const CustomTooltip = ({ active, payload, position }: any) => {
                     <span>{data.matchName}</span>
                     <span className="text-muted-foreground">vs. {data.opponent}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">
-                        {t("playerDetailsPage.rating", { defaultValue: "Rating" })}:
-                    </span>
-                    <span className="font-semibold text-emerald-500 font-mono">{data.rating.toFixed(2)}</span>
-                </div>
-
-                {position === "DEF" && (
+                {data.hasStats ? (
                     <>
                         <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">
-                                {t("playerDetailsPage.tackles", { defaultValue: "Tackles" })}:
+                                {t("playerDetailsPage.rating", { defaultValue: "Rating" })}:
                             </span>
-                            <span className="font-semibold text-blue-500 font-mono">{data.tackles}</span>
+                            <span className="font-semibold text-emerald-500 font-mono">{data.rating.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">
-                                {t("playerDetailsPage.interceptions", { defaultValue: "Interceptions" })}:
-                            </span>
-                            <span className="font-semibold text-blue-500 font-mono">{data.interceptions}</span>
-                        </div>
-                        <div className="flex justify-between items-center border-t border-border/20 pt-1 mt-1 font-semibold text-foreground">
-                            <span>
-                                {t("playerDetailsPage.defActions", { defaultValue: "Def. Actions" })}:
-                            </span>
-                            <span className="font-mono">{data.defensiveActions}</span>
-                        </div>
-                    </>
-                )}
 
-                {position === "GK" && (
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">
-                            {t("playerDetailsPage.saves", { defaultValue: "Saves" })}:
-                        </span>
-                        <span className="font-semibold text-amber-500 font-mono">{data.saves}</span>
+                        {position === "DEF" && (
+                            <>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">
+                                        {t("playerDetailsPage.tackles", { defaultValue: "Tackles" })}:
+                                    </span>
+                                    <span className="font-semibold text-blue-500 font-mono">{data.tackles}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted-foreground">
+                                        {t("playerDetailsPage.interceptions", { defaultValue: "Interceptions" })}:
+                                    </span>
+                                    <span className="font-semibold text-blue-500 font-mono">{data.interceptions}</span>
+                                </div>
+                            </>
+                        )}
+
+                        {(position === "FWD" || position === "MID") && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">
+                                    {t("playerDetailsPage.gaLabel", { defaultValue: "G/A" })}:
+                                </span>
+                                <span className="font-semibold text-rose-500 font-mono">{data.ga}</span>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="text-muted-foreground text-[10px]">
+                        {t("playerDetailsPage.noMatchStats", { defaultValue: "No detailed stats recorded" })}
                     </div>
                 )}
-
-                {(position === "FWD" || position === "MID") && (
-                    <>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">
-                                {t("playerDetailsPage.goals", { defaultValue: "Goals" })}:
-                            </span>
-                            <span className="font-semibold text-rose-500 font-mono">⚽ {data.goals}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">
-                                {t("playerDetailsPage.assists", { defaultValue: "Assists" })}:
-                            </span>
-                            <span className="font-semibold text-rose-500 font-mono">👟 {data.assists}</span>
-                        </div>
-                        <div className="flex justify-between items-center border-t border-border/20 pt-1 mt-1 font-semibold text-foreground">
-                            <span>
-                                {t("playerDetailsPage.gaLabel", { defaultValue: "G/A" })}:
-                            </span>
-                            <span className="font-mono">{data.ga}</span>
-                        </div>
-                    </>
-                )}
-
                 {data.cleanSheet !== undefined && (
                     <div className="flex justify-between items-center text-[10px] border-t border-border/20 pt-1">
                         <span className="text-muted-foreground">
@@ -265,12 +221,6 @@ const CustomTooltip = ({ active, payload, position }: any) => {
                         </span>
                     </div>
                 )}
-                <div className="flex justify-between items-center text-[10px] text-muted-foreground border-t border-border/20 pt-1">
-                    <span>
-                        {t("playerDetailsPage.minutesPlayedLabel", { defaultValue: "Minutes Played" })}:
-                    </span>
-                    <span>⏱️ {data.minutesPlayed}'</span>
-                </div>
             </div>
         )
     }
@@ -281,6 +231,9 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
     const { t } = useTranslation()
     const [activeChart, setActiveChart] = React.useState<string>("rating")
     const [stage, setStage] = React.useState("all")
+    const { ref: inViewRef, active: inView, reduceMotion } = useInViewAnimation<HTMLDivElement>()
+
+    const { matches: rawMatches, isLoading: historyLoading, error: historyError } = usePlayerMatchHistory(player?.id)
 
     const availableStats = React.useMemo(() => {
         if (!player) return []
@@ -295,40 +248,55 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
     }, [player?.position])
 
     const matchHistory = React.useMemo(() => {
-        if (!player) return []
-        return getPlayerMatchHistory(player)
-    }, [player])
+        let groupCount = 0
+        return rawMatches.map((m) => {
+            // Backend round strings aren't consistently cased ("group" vs "Group"),
+            // so match case-insensitively rather than against one exact literal.
+            const isGroup = (m.round ?? "").toLowerCase() === "group"
+            if (isGroup) groupCount += 1
+            const matchName = isGroup
+                ? `M${groupCount}`
+                : (m.round ? (ROUND_ABBREVIATIONS[m.round] ?? m.round) : "Match")
+            return {
+                matchName,
+                isGroup,
+                opponent: m.opponent ?? "OPP",
+                // null (not 0) when this match's per-player stats haven't been
+                // ingested yet, so the chart shows a gap instead of a fake drop to 0.
+                rating: m.rating,
+                ga: m.goal_contributions,
+                tackles: m.tackles,
+                interceptions: m.interceptions,
+                cleanSheet: m.clean_sheet === null ? undefined : (m.clean_sheet ? 1 : 0),
+                hasStats: m.has_player_stats,
+            }
+        })
+    }, [rawMatches])
 
     const filteredData = React.useMemo(() => {
         if (stage === "group") {
-            return matchHistory.filter((m) => m.matchName.startsWith("Group"))
+            return matchHistory.filter((m) => m.isGroup)
         }
         if (stage === "knockout") {
-            return matchHistory.filter((m) => !m.matchName.startsWith("Group"))
+            return matchHistory.filter((m) => !m.isGroup)
         }
         return matchHistory
     }, [matchHistory, stage])
 
-    const chartData = React.useMemo(() => {
-        return filteredData.map((m) => ({
-            ...m,
-            ga: m.goals + m.assists,
-            defensiveActions: (m.tackles || 0) + (m.interceptions || 0),
-            cleanSheet: m.cleanSheet !== undefined ? (m.cleanSheet ? 1 : 0) : undefined,
-        }))
-    }, [filteredData])
+    const chartData = filteredData
 
     const getStatValue = React.useCallback((stat: StatOption) => {
-        if (!player || !chartData.length) return "0"
+        const withStats = chartData.filter((m) => m.hasStats)
+        if (!player || !withStats.length) return "0"
         if (stat.key === "rating") {
-            const total = chartData.reduce((acc, curr) => acc + curr.rating, 0)
-            return (total / chartData.length).toFixed(2)
+            const total = withStats.reduce((acc, curr) => acc + (curr.rating ?? 0), 0)
+            return (total / withStats.length).toFixed(2)
         }
         if (stat.key === "cleanSheet") {
             const csCount = chartData.filter((m) => m.cleanSheet === 1).length
             return csCount.toString()
         }
-        const total = chartData.reduce((acc, curr) => {
+        const total = withStats.reduce((acc, curr) => {
             const val = curr[stat.key as keyof typeof curr]
             return acc + (typeof val === "number" ? val : 0)
         }, 0)
@@ -336,20 +304,41 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
     }, [chartData, player])
 
     const bgKey = React.useMemo(() => {
-        if (!player) return "goals"
+        if (!player) return "ga"
         switch (player.position) {
             case "GK":
-                return "saves"
+                return "cleanSheet"
             case "DEF":
                 return "tackles"
             default:
-                return "goals"
+                return "ga"
         }
     }, [player?.position])
 
     if (!player) return null
 
+    if (historyLoading) {
+        return (
+            <Card className="pt-0">
+                <CardContent className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
+                    {t("playerDetailsPage.loadingMatchHistory", { defaultValue: "Loading match history..." })}
+                </CardContent>
+            </Card>
+        )
+    }
+
+    if (historyError) {
+        return (
+            <Card className="pt-0">
+                <CardContent className="flex h-[300px] items-center justify-center text-sm text-destructive">
+                    {t("playerDetailsPage.matchHistoryError", { defaultValue: "Failed to load match history" })}
+                </CardContent>
+            </Card>
+        )
+    }
+
     return (
+        <div ref={inViewRef}>
         <Card className="pt-0">
             <CardHeader className="flex flex-col items-stretch border-b p-0! lg:flex-row">
                 <div className="flex flex-1 flex-col justify-center gap-1 px-6 pt-4 pb-3 sm:py-6">
@@ -375,7 +364,7 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                             <SelectItem value="group" className="rounded-lg">
                                 {t("playerDetailsPage.groupStage", { defaultValue: "Group Stage" })}
                             </SelectItem>
-                            {matchHistory.some((m) => !m.matchName.startsWith("Group")) && (
+                            {matchHistory.some((m) => !m.isGroup) && (
                                 <SelectItem value="knockout" className="rounded-lg">
                                     {t("playerDetailsPage.knockoutStage", { defaultValue: "Knockout Stage" })}
                                 </SelectItem>
@@ -393,12 +382,9 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                         >
                             <span className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5 whitespace-nowrap">
                                 {stat.icon === "rating" && <Star className="size-3.5 text-emerald-500" />}
-                                {stat.icon === "goals" && <Target className="size-3.5 text-rose-500" />}
-                                {stat.icon === "assists" && <Award className="size-3.5 text-violet-500" />}
                                 {stat.icon === "ga" && <Sparkles className="size-3.5 text-fuchsia-500" />}
                                 {stat.icon === "tackles" && <Shield className="size-3.5 text-blue-500" />}
                                 {stat.icon === "interceptions" && <Eye className="size-3.5 text-cyan-500" />}
-                                {stat.icon === "saves" && <Activity className="size-3.5 text-amber-500" />}
                                 {stat.icon === "cleanSheet" && <ShieldCheck className="size-3.5 text-indigo-500" />}
                                 {stat.label}
                             </span>
@@ -410,6 +396,21 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                 </div>
             </CardHeader>
             <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+                {chartData.length === 0 ? (
+                    <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
+                        {t("playerDetailsPage.noMatchHistory", { defaultValue: "No completed matches yet" })}
+                    </div>
+                ) : chartData.every((m) => !m.hasStats) ? (
+                    <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
+                        {t("playerDetailsPage.noMatchStatsForStage", { defaultValue: "Matches played, but stats haven't been recorded yet for this stage" })}
+                    </div>
+                ) : (
+                <div
+                    style={{
+                        clipPath: inView ? "inset(0 0 0 0)" : "inset(0 100% 0 0)",
+                        transition: reduceMotion ? undefined : "clip-path 1200ms ease-out",
+                    }}
+                >
                 <ChartContainer
                     config={chartConfig}
                     className="aspect-auto h-[250px] w-full"
@@ -433,30 +434,6 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                                 <stop
                                     offset="95%"
                                     stopColor="var(--color-rating)"
-                                    stopOpacity={0.05}
-                                />
-                            </linearGradient>
-                            <linearGradient id="fillGoals" x1="0" y1="0" x2="0" y2="1">
-                                <stop
-                                    offset="5%"
-                                    stopColor="var(--color-goals)"
-                                    stopOpacity={0.4}
-                                />
-                                <stop
-                                    offset="95%"
-                                    stopColor="var(--color-goals)"
-                                    stopOpacity={0.05}
-                                />
-                            </linearGradient>
-                            <linearGradient id="fillAssists" x1="0" y1="0" x2="0" y2="1">
-                                <stop
-                                    offset="5%"
-                                    stopColor="var(--color-assists)"
-                                    stopOpacity={0.4}
-                                />
-                                <stop
-                                    offset="95%"
-                                    stopColor="var(--color-assists)"
                                     stopOpacity={0.05}
                                 />
                             </linearGradient>
@@ -496,18 +473,6 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                                     stopOpacity={0.05}
                                 />
                             </linearGradient>
-                            <linearGradient id="fillSaves" x1="0" y1="0" x2="0" y2="1">
-                                <stop
-                                    offset="5%"
-                                    stopColor="var(--color-saves)"
-                                    stopOpacity={0.4}
-                                />
-                                <stop
-                                    offset="95%"
-                                    stopColor="var(--color-saves)"
-                                    stopOpacity={0.05}
-                                />
-                            </linearGradient>
                             <linearGradient id="fillCleanSheet" x1="0" y1="0" x2="0" y2="1">
                                 <stop
                                     offset="5%"
@@ -528,16 +493,7 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                             axisLine={false}
                             tickMargin={8}
                             minTickGap={10}
-                            tickFormatter={(value) => {
-                                if (value.startsWith("Group Match ")) {
-                                    return `M${value.replace("Group Match ", "")}`
-                                }
-                                if (value === "Round of 16") return "R16"
-                                if (value === "Quarter-final") return "QF"
-                                if (value === "Semi-final") return "SF"
-                                if (value === "Final") return "F"
-                                return value
-                            }}
+                            tickFormatter={(value) => ROUND_ABBREVIATIONS[value] ?? value}
                         />
                         <ChartTooltip
                             cursor={{ stroke: "var(--border)", strokeWidth: 1, strokeDasharray: "4 4" }}
@@ -545,7 +501,7 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                         />
                         {activeChart === "rating" ? (
                             <Area
-                                key={`${bgKey}-bg`}
+                                key={`${bgKey}-bg-${stage}`}
                                 dataKey={bgKey}
                                 type="monotone"
                                 stroke={`var(--color-${bgKey})`}
@@ -554,10 +510,13 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                                 fill="none"
                                 opacity={0.3}
                                 activeDot={false}
+                                isAnimationActive
+                                animationDuration={1200}
+                                animationEasing="ease-out"
                             />
                         ) : (
                             <Area
-                                key="rating-bg"
+                                key={`rating-bg-${stage}`}
                                 dataKey="rating"
                                 type="monotone"
                                 stroke="var(--color-rating)"
@@ -566,20 +525,29 @@ export function ChartAreaInteractive({ player }: { player?: PlayerRow }) {
                                 fill="none"
                                 opacity={0.3}
                                 activeDot={false}
+                                isAnimationActive
+                                animationDuration={1200}
+                                animationEasing="ease-out"
                             />
                         )}
                         <Area
+                            key={`${activeChart}-${stage}`}
                             dataKey={activeChart}
                             type="monotone"
                             fill={`url(#fill${activeChart.charAt(0).toUpperCase() + activeChart.slice(1)})`}
                             stroke={`var(--color-${activeChart})`}
                             strokeWidth={2}
                             activeDot={{ r: 6, strokeWidth: 0 }}
+                            isAnimationActive
+                            animationDuration={1200}
+                            animationEasing="ease-out"
                         />
                     </AreaChart>
                 </ChartContainer>
+                </div>
+                )}
             </CardContent>
         </Card>
+        </div>
     )
 }
-

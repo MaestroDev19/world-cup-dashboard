@@ -1,13 +1,13 @@
 import logging
 from typing import Optional, Literal
 
-import requests
 from fastapi import APIRouter, Depends, Path, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from config.db import get_db
 from db.controllers.players import (
     get_player_by_id,
+    get_player_match_history,
     get_players_leaderboard,
     get_top_players_by_clean_sheets,
     get_top_players_by_assists,
@@ -25,6 +25,7 @@ from server.schemas.players import (
     PlayerClassification,
     PlayerInfoResponse,
     PlayerLeaderboardResponse,
+    PlayerMatchHistoryResponse,
     PlayerSearchResponse,
     PlayerStatisticsResponse,
     PlayerTopCleanSheetsResponse,
@@ -145,7 +146,7 @@ def search_players(
 
 
 @router.get("/{player_id}/image")
-def get_player_image(
+async def get_player_image(
     player_id: int = Path(..., gt=0, description="Positive integer player ID"),
     db: Session = Depends(get_db),
 ):
@@ -161,12 +162,12 @@ def get_player_image(
 
     source_url = resolve_player_image_source_url(player_id, player.image_url)
     try:
-        image_bytes, content_type = fetch_player_image_bytes(source_url)
-    except requests.RequestException:
-        raise HTTPException(status_code=502, detail="Failed to fetch player image.") from None
+        image_bytes, content_type = await fetch_player_image_bytes(source_url)
     except ValueError as exc:
         status_code = 404 if str(exc) == "upstream_status_404" else 502
         raise HTTPException(status_code=status_code, detail="Player image unavailable.") from None
+    except Exception:
+        raise HTTPException(status_code=502, detail="Failed to fetch player image.") from None
 
     logger.info(
         {
@@ -228,6 +229,26 @@ def get_player_statistics(
         "name": player.name,
         "statistics": stats_json,
     }
+
+
+@router.get("/{player_id}/match-history", response_model=PlayerMatchHistoryResponse)
+def get_player_match_history_route(
+    player_id: int = Path(..., gt=0, description="Positive integer player ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Real, match-by-match history for a player: completed matches only, with
+    real round/opponent/score plus any per-match stats we've ingested.
+    """
+    logger.info({"message": "Fetching player match history", "player_id": player_id})
+
+    player = get_player_by_id(db, player_id)
+    if player is None:
+        logger.warning({"message": "Player match history not found", "player_id": player_id})
+        raise HTTPException(status_code=404, detail=f"Player with id {player_id} not found.")
+
+    matches = get_player_match_history(db, player_id)
+    return {"matches": matches}
 
 
 @router.get("/top/goals", response_model=list[PlayerTopGoalsResponse])
